@@ -1,54 +1,79 @@
-/* *****************************************************************************
-Copyright 2016 Google LLC
-
-Licensed under the Apache License, Version 2.0 (the "License")
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-********************************************************************************
-
-This is a sample Slack bot built with Botkit.
-*/
-
 const { Botkit } = require('botkit');
 const {
   SlackAdapter,
   SlackEventMiddleware,
 } = require('botbuilder-adapter-slack');
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
+const axios = require('axios');
+
+// OpenAI API Configuration
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const MODEL_NAME = "gpt-3.5-turbo"; // Cheapest model
+
+const secretClient = new SecretManagerServiceClient();
+const projectId = process.env.PROJECT_ID;
 
 /**
- * Returns the secret string from Google Cloud Secret Manager
- * @param {string} name The name of the secret.
- * @return {Promise<string>} The string value of the secret.
+ * Function to access secrets from Google Secret Manager.
  */
-async function accessSecretVersion(name) {
-  const client = new SecretManagerServiceClient();
-  const projectId = process.env.PROJECT_ID;
-  const [version] = await client.accessSecretVersion({
-    name: `projects/${projectId}/secrets/${name}/versions/1`,
-  });
-
-  // Extract the payload as a string.
-  const payload = version.payload.data.toString('utf8');
-
-  return payload;
+async function accessSecret(name) {
+  try {
+    const [version] = await secretClient.accessSecretVersion({
+      name: `projects/${projectId}/secrets/${name}/versions/latest`,
+    });
+    return version.payload.data.toString('utf8');
+  } catch (error) {
+    console.error(`Error retrieving secret ${name}:`, error);
+    return null;
+  }
 }
 
 /**
- * Function to initialize kittenbot.
+ * Function to get AI response from OpenAI API.
+ */
+async function getChatGPTResponse(userMessage, apiKey) {
+  try {
+    const response = await axios.post(
+      OPENAI_API_URL,
+      {
+        model: MODEL_NAME,
+        messages: [
+          { role: "system", content: "You are a helpful assistant in a Slack workspace." },
+          { role: "user", content: userMessage }
+        ],
+        temperature: 0.7
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return response.data.choices[0].message.content; // Extract AI response
+  } catch (error) {
+    console.error("Error with OpenAI API:", error.response ? error.response.data : error.message);
+    return "Sorry, I couldn't generate a response.";
+  }
+}
+
+/**
+ * Initialize AI-powered Kittenbot with secrets from Secret Manager.
  */
 async function kittenbotInit() {
+  const openAiKey = await accessSecret('api-key');
+  const slackSigningSecret = await accessSecret('client-signing-secret');
+  const slackBotToken = await accessSecret('bot-token');
+
+  if (!openAiKey || !slackSigningSecret || !slackBotToken) {
+    console.error("Missing required secrets. Exiting...");
+    process.exit(1);
+  }
+
   const adapter = new SlackAdapter({
-    clientSigningSecret: await accessSecretVersion('client-signing-secret'),
-    botToken: await accessSecretVersion('bot-token'),
+    clientSigningSecret: slackSigningSecret,
+    botToken: slackBotToken,
   });
 
   adapter.use(new SlackEventMiddleware());
@@ -60,13 +85,21 @@ async function kittenbotInit() {
 
   controller.ready(() => {
     controller.hears(
-      ['hello', 'hi', 'hey'],
+      ['.*'], // Listen to all messages
       ['message', 'direct_message'],
       async (bot, message) => {
-        await bot.reply(message, 'Meow. :smile_cat:');
+        await bot.reply(message, "Thinking... 🤔");
+
+        // Get AI-generated response from OpenAI
+        const aiResponse = await getChatGPTResponse(message.text, openAiKey);
+
+        // Send response back to Slack
+        await bot.reply(message, aiResponse);
       }
     );
   });
+
+  console.log("Kittenbot (GPT-3.5 AI) is running with Secret Manager! 🔐");
 }
 
 kittenbotInit();
