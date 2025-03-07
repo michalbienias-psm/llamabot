@@ -1,0 +1,24 @@
+{
+  "name": "cloud-slack-bot-example",
+  "version": "2.0.0",
+  "description": "A sample Slack Botkit bot.",
+  "main": "kittenbot.js",
+  "scripts": {
+    "start": "node kittenbot.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": "16"
+  },
+  "dependencies": {
+    "@google-cloud/secret-manager": "4",
+    "botbuilder-adapter-slack": "1",
+    "request": "2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/googlecodelabs/cloud-slack-bot.git"
+  },
+  "author": "Google Inc.",
+  "license": "Apache-2.0"
+}
