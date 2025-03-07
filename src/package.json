@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "A sample Slack Botkit bot.",
   "main": "kittenbot.js",
+  "type": "module",
   "scripts": {
     "start": "node kittenbot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
