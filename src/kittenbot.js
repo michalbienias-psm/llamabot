@@ -2,6 +2,16 @@
 const { App } = require("@slack/bolt");
 const { SecretManagerServiceClient } = require("@google-cloud/secret-manager");
 const OpenAI = require("openai");
+const express = require("express"); // To keep the server alive
+
+const express_app = express();
+const PORT = process.env.PORT || 8080; 
+
+express_app.get("/", (req, res) => res.send("Slack AI Assistant is running... 🚀"));
+
+express_app.listen(PORT, () => {
+    console.log(`✅ Server is running on port ${PORT}`);
+});
 
 // Initialize Google Secret Manager Client
 const secretClient = new SecretManagerServiceClient();
