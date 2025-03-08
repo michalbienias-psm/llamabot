@@ -1,10 +1,9 @@
-import { Botkit } from "botkit";
-import { SlackAdapter, SlackEventMiddleware } from "botbuilder-adapter-slack";
-import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
-import OpenAI from "openai";
+// Use CommonJS-style require() instead of import
+const { App } = require("@slack/bolt");
+const { SecretManagerServiceClient } = require("@google-cloud/secret-manager");
+const OpenAI = require("openai");
 
-// OpenAI API Configuration
-const MODEL_NAME = "gpt-3.5-turbo"; // Cheapest model
+// Initialize Google Secret Manager Client
 const secretClient = new SecretManagerServiceClient();
 const projectId = process.env.PROJECT_ID;
 
@@ -18,81 +17,67 @@ async function accessSecret(name) {
     });
     return version.payload.data.toString("utf8");
   } catch (error) {
-    console.error(`Error retrieving secret ${name}:`, error);
+    console.error(`❌ Error retrieving secret ${name}:`, error);
     return null;
   }
 }
 
 /**
- * Function to get AI response from OpenAI API using OpenAI SDK.
+ * Function to get AI response from OpenAI API.
  */
 async function getChatGPTResponse(userMessage, apiKey) {
   try {
     const openai = new OpenAI({ apiKey });
 
     const response = await openai.chat.completions.create({
-      model: MODEL_NAME,
+      model: "gpt-3.5-turbo",
       messages: [
         { role: "system", content: "You are a helpful assistant in a Slack workspace." },
         { role: "user", content: userMessage }
       ],
-      response_format: { type: "text" },
-      temperature: 1,
-      max_tokens: 2048,
-      top_p: 1,
-      frequency_penalty: 0,
-      presence_penalty: 0
+      temperature: 0.7,
+      max_tokens: 500
     });
 
-    return response.choices[0].message.content; // Extract AI response
+    return response.choices[0].message.content;
   } catch (error) {
-    console.error("Error with OpenAI API:", error);
+    console.error("❌ Error with OpenAI API:", error);
     return "Sorry, I couldn't generate a response.";
   }
 }
 
 /**
- * Initialize AI-powered Kittenbot with secrets from Secret Manager.
+ * Initialize the Slack Bot using Bolt.js.
  */
-async function kittenbotInit() {
-  const openAiKey = await accessSecret("api-key");
-  const slackSigningSecret = await accessSecret("client-signing-secret");
+async function startBot() {
+  const slackAppToken = await accessSecret("app-token");
   const slackBotToken = await accessSecret("bot-token");
-
-  if (!openAiKey || !slackSigningSecret || !slackBotToken) {
-    console.error("Missing required secrets. Exiting...");
+  const openAIkey = await accessSecret("api-key");
+  if (!slackAppToken || !slackBotToken) {
+    console.error("❌ Missing required Slack tokens. Exiting...");
     process.exit(1);
   }
 
-  const adapter = new SlackAdapter({
-    clientSigningSecret: slackSigningSecret,
-    botToken: slackBotToken,
+  const app = new App({
+    token: slackBotToken,
+    appToken: slackAppToken,
+    socketMode: true, // ✅ No need for webhook, uses WebSocket
   });
 
-  adapter.use(new SlackEventMiddleware());
+  // Listen to all messages
+  app.message(async ({ message, say }) => {
+    console.log("🔹 Received message:", message.text);
+    await say("Thinking... 🤔");
 
-  const controller = new Botkit({
-    webhook_uri: "/api/messages",
-    adapter: adapter,
+    const aiResponse = await getChatGPTResponse(message.text, openAIkey);
+    console.log("🤖 AI Response:", aiResponse);
+
+    await say(aiResponse);
   });
 
-  controller.ready(() => {
-    controller.hears(
-      [".*"], // Listen to all messages
-      ["message", "direct_message"],
-      async (bot, message) => {
-        await bot.reply(message, "Thinking... 🤔");
-
-        // Get AI-generated response from OpenAI
-        const aiResponse = await getChatGPTResponse(message.text, openAiKey);
-
-        // Send response back to Slack
-        await bot.reply(message, aiResponse);
-      }
-    );
-  });
-
-  console.log("Kittenbot (GPT-3.5 AI) is running with OpenAI SDK! 🚀");
+  // Start Slack bot
+  await app.start();
+  console.log("🚀 Slack AI Assistant is running with Bolt.js!");
 }
 
-kittenbotInit();
+startBot();
