@@ -1,25 +1,12 @@
-// Use CommonJS-style require() instead of import
-const { App } = require("@slack/bolt");
+const express = require("express");
+const { App, ExpressReceiver } = require("@slack/bolt");
 const { SecretManagerServiceClient } = require("@google-cloud/secret-manager");
 const OpenAI = require("openai");
-const express = require("express"); // To keep the server alive
 
-const express_app = express();
-const PORT = process.env.PORT || 8080; 
-
-express_app.get("/", (req, res) => res.send("Slack AI Assistant is running... 🚀"));
-
-express_app.listen(PORT, () => {
-    console.log(`✅ Server is running on port ${PORT}`);
-});
-
-// Initialize Google Secret Manager Client
+// Load secrets from Google Secret Manager
 const secretClient = new SecretManagerServiceClient();
-const projectId = process.env.PROJECT_ID;
+const projectId = process.env.PROJECT_ID; // add fallback if needed
 
-/**
- * Function to access secrets from Google Secret Manager.
- */
 async function accessSecret(name) {
   try {
     const [version] = await secretClient.accessSecretVersion({
@@ -32,9 +19,6 @@ async function accessSecret(name) {
   }
 }
 
-/**
- * Function to get AI response from OpenAI API.
- */
 async function getChatGPTResponse(userMessage, apiKey) {
   try {
     const openai = new OpenAI({ apiKey });
@@ -56,22 +40,25 @@ async function getChatGPTResponse(userMessage, apiKey) {
   }
 }
 
-/**
- * Initialize the Slack Bot using Bolt.js.
- */
 async function startBot() {
-  const slackAppToken = await accessSecret("app-token");
+  const slackSigningSecret = await accessSecret("client-signing-secret");
   const slackBotToken = await accessSecret("bot-token");
   const openAIkey = await accessSecret("api-key");
-  if (!slackAppToken || !slackBotToken) {
-    console.error("❌ Missing required Slack tokens. Exiting...");
+
+  if (!slackSigningSecret || !slackBotToken || !openAIkey) {
+    console.error("❌ Missing required secrets. Exiting...");
     process.exit(1);
   }
 
+  // Create a custom receiver for HTTP mode
+  const receiver = new ExpressReceiver({
+    signingSecret: slackSigningSecret,
+    endpoints: "/slack/events", // Slack will send POST requests here
+  });
+
   const app = new App({
     token: slackBotToken,
-    appToken: slackAppToken,
-    socketMode: true, // ✅ No need for webhook, uses WebSocket
+    receiver,
   });
 
   // Listen to all messages
@@ -85,9 +72,15 @@ async function startBot() {
     await say(aiResponse);
   });
 
-  // Start Slack bot
-  await app.start();
-  console.log("🚀 Slack AI Assistant is running with Bolt.js!");
+  // Start Express app
+  const expressApp = require("express")();
+  expressApp.use(receiver.app);
+
+  const PORT = process.env.PORT || 8080;
+  expressApp.get("/", (req, res) => res.send("Slack AI Assistant is running... 🚀"));
+  expressApp.listen(PORT, () => {
+    console.log(`✅ Server is running on port ${PORT}`);
+  });
 }
 
 startBot();
