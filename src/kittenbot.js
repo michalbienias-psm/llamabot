@@ -58,11 +58,14 @@ async function startBot() {
   // Create ExpressReceiver for HTTP-based Events API
   const receiver = new ExpressReceiver({
     signingSecret: slackSigningSecret,
+    endpoints: "/slack/events"
   });
 
   const app = new App({
     token: slackBotToken,
+    signingSecret: slackSigningSecret, // ← REQUIRED for Events API
     receiver: receiver,
+    socketMode: false // (omit or set false if you're switching to Events API)
   });
 
   // Message handler
