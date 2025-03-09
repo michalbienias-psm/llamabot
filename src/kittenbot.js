@@ -78,6 +78,16 @@ async function startBot() {
 
   const PORT = process.env.PORT || 8080;
   expressApp.get("/", (req, res) => res.send("Slack AI Assistant is running... 🚀"));
+  expressApp.post("/slack/events", express.json(), (req, res) => {
+    if (req.body.type === "url_verification") {
+      console.log("✅ Received Slack challenge verification request");
+      return res.status(200).send(req.body.challenge);
+    }
+  
+    // Let Bolt handle other events
+    receiver.app(req, res);
+  });
+  
   expressApp.listen(PORT, () => {
     console.log(`✅ Server is running on port ${PORT}`);
   });
