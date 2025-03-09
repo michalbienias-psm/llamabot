@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A Slack AI Assistant using Bolt.js and OpenAI.",
   "main": "kittenbot.js",
+  "type":"commonjs",
   "scripts": {
     "start": "node kittenbot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
