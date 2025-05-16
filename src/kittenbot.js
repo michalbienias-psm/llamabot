@@ -74,7 +74,10 @@ async function startBot() {
     await say("Thinking... 🤔");
     const aiResponse = await getChatGPTResponse(message.text, openAIKey);
     console.log("🤖 AI Response:", aiResponse);
-    await say(aiResponse);
+    await client.chat.postMessage({
+      channel: message.channel,
+      text: aiResponse,
+    });
   });
 
   // Custom route to handle challenge verification
