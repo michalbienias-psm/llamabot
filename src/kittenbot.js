@@ -71,10 +71,9 @@ async function startBot() {
   // Message handler
   app.message(async ({ message, say }) => {
     console.log("🔹 Received message:", message.text);
-    await say("Thinking... 🤔");
     const aiResponse = await getChatGPTResponse(message.text, openAIKey);
     console.log("🤖 AI Response:", aiResponse);
-    await client.chat.postMessage({
+    client.chat.postMessage({
       channel: message.channel,
       text: aiResponse,
     });
